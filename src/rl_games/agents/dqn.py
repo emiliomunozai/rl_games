@@ -14,11 +14,12 @@ from collections import deque
 from pathlib import Path
 from typing import Self
 
-import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+from rl_games import envs
 
 
 # ── Neural network ────────────────────────────────────────────────────
@@ -92,7 +93,7 @@ class DQNAgent:
         self.target_update_freq = target_update_freq
         self.training_episodes = 0
 
-        env = gym.make(env_id)
+        env = envs.make(env_id)
         self.state_dim = env.observation_space.shape[0]
         self.action_dim = int(env.action_space.n)  # type: ignore[attr-defined]
         env.close()
@@ -161,7 +162,7 @@ class DQNAgent:
     # ── training loop ─────────────────────────────────────────────────
 
     def train(self, total_episodes: int = 500, log_interval: int = 10) -> list[float]:
-        env = gym.make(self.env_id)
+        env = envs.make(self.env_id)
         rewards_history: list[float] = []
 
         for episode in range(1, total_episodes + 1):

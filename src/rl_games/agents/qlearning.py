@@ -3,23 +3,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Self
 
-import gymnasium as gym
 import numpy as np
 
-# Approximate observation bounds
-# Dims 0-5 are continuous; dims 6-7 are binary leg-contact flags.
-_OBS_BOUNDS = np.array(
-    [
-        [-1.5, 1.5],
-        [-0.5, 1.5],
-        [-5.0, 5.0],
-        [-5.0, 5.0],
-        [-3.14, 3.14],
-        [-5.0, 5.0],
-    ]
-)
-
-_N_ACTIONS = 4
+from rl_games import envs
 
 
 class QLearningAgent:
@@ -43,11 +29,13 @@ class QLearningAgent:
         self.epsilon_decay = epsilon_decay
         self.training_episodes = 0
 
+        self._spec = envs.spec_for(env_id)
+        self.n_actions = self._spec.N_ACTIONS
         self._bins = [
-            np.linspace(lo, hi, n_bins + 1)[1:-1] for lo, hi in _OBS_BOUNDS
+            np.linspace(lo, hi, n_bins + 1)[1:-1] for lo, hi in self._spec.OBS_BOUNDS
         ]
         self.q_table: dict[tuple, np.ndarray] = defaultdict(
-            lambda: np.zeros(_N_ACTIONS)
+            lambda: np.zeros(self.n_actions)
         )
 
     # ------------------------------------------------------------------
@@ -55,15 +43,21 @@ class QLearningAgent:
     # ------------------------------------------------------------------
 
     def discretize(self, obs: np.ndarray) -> tuple:
-        continuous = np.clip(obs[:6], _OBS_BOUNDS[:, 0], _OBS_BOUNDS[:, 1])
-        indices = [int(np.digitize(continuous[i], self._bins[i])) for i in range(6)]
-        indices.append(int(obs[6]))
-        indices.append(int(obs[7]))
+        bounds = self._spec.OBS_BOUNDS
+        n_cont = self._spec.N_CONTINUOUS_DIMS
+        continuous = np.clip(obs[:n_cont], bounds[:, 0], bounds[:, 1])
+        indices = [
+            int(np.digitize(continuous[i], self._bins[i])) for i in range(n_cont)
+        ]
+        # Binary flags (e.g. leg contact) are already discrete.
+        indices.extend(
+            int(obs[n_cont + i]) for i in range(self._spec.N_BINARY_DIMS)
+        )
         return tuple(indices)
 
     def select_action(self, state: tuple, *, deterministic: bool = False) -> int:
         if not deterministic and np.random.random() < self.epsilon:
-            return np.random.randint(_N_ACTIONS)
+            return np.random.randint(self.n_actions)
         return int(np.argmax(self.q_table[state]))
 
     def predict(
@@ -90,7 +84,7 @@ class QLearningAgent:
         self.q_table[state][action] += self.lr * td_error
 
     def train(self, total_episodes: int = 10_000, log_interval: int = 100) -> list[float]:
-        env = gym.make(self.env_id)
+        env = envs.make(self.env_id)
         rewards_history: list[float] = []
 
         for episode in range(1, total_episodes + 1):
@@ -168,7 +162,7 @@ class QLearningAgent:
             epsilon_decay=data["epsilon_decay"],
         )
         agent.q_table = defaultdict(
-            lambda: np.zeros(_N_ACTIONS), data["q_table"]
+            lambda: np.zeros(agent.n_actions), data["q_table"]
         )
         agent.training_episodes = data["training_episodes"]
         return agent

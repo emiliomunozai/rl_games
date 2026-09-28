@@ -2,10 +2,11 @@ import argparse
 from importlib.metadata import version
 from pathlib import Path
 
-import gymnasium as gym
 import numpy as np
 
-ENV_ID = "LunarLander-v3"
+from rl_games import envs
+
+ENV_ID = envs.DEFAULT_ENV_ID
 SAVE_DIR = Path("saves")
 AGENT_CHOICES = ("qlearning", "dqn")
 VERSION = version("rl_games")
@@ -31,7 +32,7 @@ def _load_agent(agent_type: str):
 
 def cmd_inspect(args: argparse.Namespace) -> None:
     env_id = args.env or ENV_ID
-    env = gym.make(env_id)
+    env = envs.make(env_id)
 
     print(f"Environment: {env_id}\n")
     print(f"Observation space : {env.observation_space}")
@@ -125,7 +126,7 @@ def cmd_load(args: argparse.Namespace) -> None:
 
     if args.eval:
         print("\nEvaluating (10 episodes) ...")
-        env = gym.make(ENV_ID)
+        env = envs.make(ENV_ID)
         rewards = []
         for _ in range(10):
             obs, _ = env.reset()
@@ -140,19 +141,6 @@ def cmd_load(args: argparse.Namespace) -> None:
         print(f"  Mean reward: {np.mean(rewards):.2f} +/- {np.std(rewards):.2f}")
 
 
-ACTION_NAMES = {
-    0: "noop",
-    1: "left engine",
-    2: "main engine",
-    3: "right engine",
-}
-
-
-def _fmt_action(action: int) -> str:
-    name = ACTION_NAMES.get(action, "?")
-    return f"{action} ({name})"
-
-
 def cmd_sim(args: argparse.Namespace) -> None:
     path = _save_path(args.agent)
     if not path.exists():
@@ -160,7 +148,7 @@ def cmd_sim(args: argparse.Namespace) -> None:
         return
 
     agent = _load_agent(args.agent)
-    env = gym.make(ENV_ID)
+    env = envs.make(ENV_ID)
 
     all_rewards: list[float] = []
 
@@ -185,7 +173,7 @@ def cmd_sim(args: argparse.Namespace) -> None:
 
             if limit is None or step <= limit:
                 print(
-                    f"  step {step:>4} | action={_fmt_action(action):>18} | "
+                    f"  step {step:>4} | action={envs.spec_for(ENV_ID).format_action(action):>18} | "
                     f"reward={reward:+8.3f} | total={total_reward:+9.2f}"
                 )
                 if args.verbose:
@@ -196,13 +184,9 @@ def cmd_sim(args: argparse.Namespace) -> None:
         if limit is not None and step > limit:
             print(f"  ... ({step - limit} more steps) ...")
 
-        outcome = "LANDED" if not terminated else "CRASHED" if total_reward < 0 else "LANDED"
-        if truncated:
-            outcome = "TRUNCATED (time limit)"
-        elif terminated and total_reward < 0:
-            outcome = "CRASHED"
-        else:
-            outcome = "LANDED"
+        outcome = envs.spec_for(ENV_ID).decode_outcome(
+            terminated, truncated, total_reward
+        )
 
         print(f"\n  Result: {outcome} | Steps: {step} | Total reward: {total_reward:+.2f}\n")
         all_rewards.append(total_reward)
@@ -223,7 +207,7 @@ def cmd_render(args: argparse.Namespace) -> None:
         return
 
     agent = _load_agent(args.agent)
-    env = gym.make(ENV_ID, render_mode="human")
+    env = envs.make(ENV_ID, render_mode="human")
 
     for ep in range(1, args.episodes + 1):
         obs, _ = env.reset()
