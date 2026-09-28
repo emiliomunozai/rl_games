@@ -105,6 +105,8 @@ class QLearningAgent:
                 action = self.select_action(state)
                 # Take action
                 next_obs, reward, terminated, truncated, _ = env.step(action)
+                # Update done flag
+                done = terminated or truncated
                 # Update state
                 next_state = self.discretize(next_obs)
                 # Update Q-table
