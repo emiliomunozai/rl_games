@@ -27,6 +27,21 @@ def _load_agent(agent_type: str):
     return DQNAgent.load(path)
 
 
+def _run_episodes(agent, env, n_episodes: int) -> list[float]:
+    """Run n_episodes greedily and return each episode's total reward."""
+    returns = []
+    for _ in range(n_episodes):
+        obs, _ = env.reset()
+        done, total = False, 0.0
+        while not done:
+            action, _ = agent.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+            total += reward
+        returns.append(total)
+    return returns
+
+
 # ── commands ─────────────────────────────────────────────────────────
 
 
@@ -127,16 +142,7 @@ def cmd_load(args: argparse.Namespace) -> None:
     if args.eval:
         print("\nEvaluating (10 episodes) ...")
         env = envs.make(ENV_ID)
-        rewards = []
-        for _ in range(10):
-            obs, _ = env.reset()
-            done, total = False, 0.0
-            while not done:
-                action, _ = agent.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, _ = env.step(action)
-                done = terminated or truncated
-                total += reward
-            rewards.append(total)
+        rewards = _run_episodes(agent, env, 10)
         env.close()
         print(f"  Mean reward: {np.mean(rewards):.2f} +/- {np.std(rewards):.2f}")
 
@@ -209,17 +215,7 @@ def cmd_render(args: argparse.Namespace) -> None:
     agent = _load_agent(args.agent)
     env = envs.make(ENV_ID, render_mode="human")
 
-    for ep in range(1, args.episodes + 1):
-        obs, _ = env.reset()
-        done = False
-        total_reward = 0.0
-
-        while not done:
-            action, _ = agent.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, _ = env.step(action)
-            done = terminated or truncated
-            total_reward += reward
-
+    for ep, total_reward in enumerate(_run_episodes(agent, env, args.episodes), 1):
         print(f"Episode {ep}/{args.episodes} | Reward: {total_reward:.2f}")
 
     env.close()
